@@ -1,10 +1,14 @@
 import express from "express";
 import uniqid from "uniqid";
+import createError from "http-errors";
 
 import fs from "fs";
 import path, {dirname, join} from "path";
 
 import {fileURLToPath} from "url";
+
+import {validationResult} from "express-validator";
+import {postValidation} from "./validation.js";
 
 // const __fileName = fileURLToPath(import.meta.url);
 const __fileName = fileURLToPath(import.meta.url);
@@ -13,7 +17,7 @@ const __dirName = dirname(__fileName);
 
 const blogPostPath = join(__dirName, "blogPosts.json");
 
-const router = express.Router();
+const blogRouter = express.Router();
 
 // function to get the file
 
@@ -32,44 +36,58 @@ function putPost(fileName) {
 
 // get all the posts
 
-router.get("/", async (req, res, next) => {
+blogRouter.get("/", (req, res, next) => {
   try {
     const file = getPost();
+
     res.send(file);
   } catch (error) {
-    res.send(500).send({message: error.message});
+    next(error);
   }
 });
 
 // get single post
 
-router.get("/:id", async (req, res, next) => {
+blogRouter.get("/:id", async (req, res, next) => {
   try {
     const file = getPost();
     const new_file = file.find((p) => p._id === req.params.id);
-    res.send(new_file);
+    if (new_file) {
+      res.send(new_file);
+    } else {
+      next(
+        createError(404, `User with the id ${req.params.id} doesn't exists`)
+      );
+    }
   } catch (error) {
-    res.send(500).send({message: error.message});
+    next(error);
   }
 });
 
 //post somthing
-router.post("/", async (req, res, next) => {
+blogRouter.post("/", postValidation, async (req, res, next) => {
   try {
-    const file = getPost();
-    console.log(req.body, ": this is the body of the request");
-    const new_file = {...req.body, _id: uniqid(), created_at: new Date()};
-    file.push(new_file);
-    console.log(file);
-    putPost(file);
-    res.send(new_file);
+    // const errors = validationResult(req);
+    // validation result gives back a list of errors coming from the userValidation Middleware
+    if (errors.isEmpty()) {
+      const file = getPost();
+      console.log(req.body, ": this is the body of the request");
+      const new_file = {...req.body, _id: uniqid(), created_at: new Date()};
+      file.push(new_file);
+      console.log(file);
+      putPost(file);
+      res.status(201).send(new_file);
+    } else {
+      next(createError(400, {errorList: errors}));
+      // I had validation errors
+    }
   } catch (error) {
-    res.send(500).send({message: error.message});
+    next(error);
   }
 });
 
 // update post
-router.put("/:id", async (req, res, next) => {
+blogRouter.put("/:id", async (req, res, next) => {
   try {
     const file = getPost();
     const post = file.find((p) => p._id === req.params.id);
@@ -78,20 +96,20 @@ router.put("/:id", async (req, res, next) => {
     putPost(file);
     res.send(new_file);
   } catch (error) {
-    res.send(500).send({message: error.message});
+    next(error);
   }
 });
 
 // delete post
-router.delete("/:id", async (req, res, next) => {
+blogRouter.delete("/:id", async (req, res, next) => {
   try {
     const file = getPost();
     const new_file = file.filter((p) => p._id !== req.params.id);
     putPost(new_file);
     res.send("DELETED");
   } catch (error) {
-    res.send(500).send({message: error.message});
+    next(error);
   }
 });
 
-export default router;
+export default blogRouter;
